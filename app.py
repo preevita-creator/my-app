@@ -234,7 +234,14 @@ def load_logs(key):
     conn.close()
     return df
 
-def get_client_ip():
+def is_mobile():
+    """모바일 기기인지 감지"""
+    try:
+        # Streamlit의 query parameter로 모바일 여부 감지
+        # 또는 사용자 에이전트로 감지 (간단한 방법)
+        return False  # 기본값은 False, CSS 미디어쿼리로 처리
+    except:
+        return False
     try:
         return socket.gethostbyname(socket.gethostname())
     except Exception:
@@ -405,63 +412,93 @@ else:
             if logs_df.empty:
                 st.info("아직 기록이 없습니다. 버튼을 눌러 선정을 시작하세요.")
             else:
-                # 테이블 헤더
-                header_cols = st.columns([1.2, 2, 1.5, 1.8, 2, 1.5, 1.2, 2, 1.5])
-                with header_cols[0]:
-                    st.markdown("**번호**")
-                with header_cols[1]:
-                    st.markdown("**추출 시각**")
-                with header_cols[2]:
-                    st.markdown("**관리자**")
-                with header_cols[3]:
-                    st.markdown("**IP 주소**")
-                with header_cols[4]:
-                    st.markdown("**업체명**")
-                with header_cols[5]:
-                    st.markdown("**품의번호**")
-                with header_cols[6]:
-                    st.markdown("**상태**")
-                with header_cols[7]:
-                    st.markdown("**거부사유**")
-                with header_cols[8]:
-                    st.markdown("**다운로드**")
+                # 모바일 친화적인 카드 형식으로 표시
+                st.markdown("""
+                <style>
+                .record-card {
+                    border: 1px solid #e0e0e0;
+                    border-radius: 8px;
+                    padding: 1rem;
+                    margin-bottom: 0.8rem;
+                    background: #fafafa;
+                }
+                .record-row {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 0.5rem;
+                    font-size: 0.85rem;
+                }
+                .record-label {
+                    font-weight: 600;
+                    color: #666;
+                    min-width: 70px;
+                }
+                .record-value {
+                    text-align: right;
+                    color: #333;
+                    flex: 1;
+                    margin-left: 0.5rem;
+                    word-break: break-word;
+                }
+                </style>
+                """, unsafe_allow_html=True)
                 
-                st.divider()
-                
-                # 테이블 행
                 for idx, row in logs_df.iterrows():
-                    row_cols = st.columns([1.2, 2, 1.5, 1.8, 2, 1.5, 1.2, 2, 1.5])
-                    
-                    with row_cols[0]:
-                        st.write(str(row['번호']))
-                    with row_cols[1]:
-                        st.write(str(row['추출 시각']))
-                    with row_cols[2]:
-                        st.write(str(row['관리자']))
-                    with row_cols[3]:
-                        st.write(str(row['IP 주소']))
-                    with row_cols[4]:
-                        st.write(str(row['업체명']))
-                    with row_cols[5]:
-                        st.write(str(row['품의번호']))
-                    with row_cols[6]:
-                        st.write(str(row['상태']))
-                    with row_cols[7]:
-                        st.write(str(row['거부사유']) if row['거부사유'] else "-")
-                    with row_cols[8]:
-                        if row['거부사유'] and row['reject_file'] and os.path.exists(row['reject_file']):
-                            with open(row['reject_file'], 'rb') as f:
-                                file_data = f.read()
-                            file_name = os.path.basename(row['reject_file'])
-                            st.download_button(
-                                label="📥",
-                                data=file_data,
-                                file_name=file_name,
-                                key=f"download_{key}_{row['번호']}",
-                                help="사유서 다운로드"
-                            )
-                        else:
-                            st.write("-")
+                    with st.container():
+                        col_content, col_btn = st.columns([4, 1])
+                        
+                        with col_content:
+                            st.markdown(f"""
+                            <div class="record-card">
+                                <div class="record-row">
+                                    <span class="record-label">번호:</span>
+                                    <span class="record-value">{row['번호']}</span>
+                                </div>
+                                <div class="record-row">
+                                    <span class="record-label">시각:</span>
+                                    <span class="record-value">{row['추출 시각']}</span>
+                                </div>
+                                <div class="record-row">
+                                    <span class="record-label">관리자:</span>
+                                    <span class="record-value">{row['관리자']}</span>
+                                </div>
+                                <div class="record-row">
+                                    <span class="record-label">IP:</span>
+                                    <span class="record-value" style="font-size:0.75rem;">{row['IP 주소']}</span>
+                                </div>
+                                <div class="record-row">
+                                    <span class="record-label">업체:</span>
+                                    <span class="record-value">{row['업체명']}</span>
+                                </div>
+                                <div class="record-row">
+                                    <span class="record-label">품의:</span>
+                                    <span class="record-value">{row['품의번호'] if row['품의번호'] else '-'}</span>
+                                </div>
+                                <div class="record-row">
+                                    <span class="record-label">상태:</span>
+                                    <span class="record-value">{row['상태']}</span>
+                                </div>
+                                <div class="record-row">
+                                    <span class="record-label">사유:</span>
+                                    <span class="record-value">{row['거부사유'] if row['거부사유'] else '-'}</span>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        
+                        with col_btn:
+                            if row['거부사유'] and row['reject_file'] and os.path.exists(row['reject_file']):
+                                with open(row['reject_file'], 'rb') as f:
+                                    file_data = f.read()
+                                file_name = os.path.basename(row['reject_file'])
+                                st.download_button(
+                                    label="📥",
+                                    data=file_data,
+                                    file_name=file_name,
+                                    key=f"download_{key}_{row['번호']}",
+                                    help="사유서 다운로드"
+                                )
+                            else:
+                                st.write("-")
                 
                 st.markdown("---")
                 
@@ -473,7 +510,7 @@ else:
                         st.caption(f"총 {len(logs_df)}건의 기록")
                     with col_excel:
                         st.download_button(
-                            label="📥 엑셀 저장",
+                            label="📥 엑셀",
                             data=excel_data,
                             file_name=f"{tab['name'].replace(' ', '_')}_순번이력.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
