@@ -465,7 +465,7 @@ else:
                                 data=file_data,
                                 file_name=file_name,
                                 key=f"download_{key}_{row['번호']}",
-                                help="사유서 다운로드",
+                                help="다운로드",
                                 use_container_width=True
                             )
                         else:
