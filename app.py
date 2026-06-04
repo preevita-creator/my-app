@@ -412,93 +412,33 @@ else:
             if logs_df.empty:
                 st.info("아직 기록이 없습니다. 버튼을 눌러 선정을 시작하세요.")
             else:
-                # 모바일 친화적인 카드 형식으로 표시
-                st.markdown("""
-                <style>
-                .record-card {
-                    border: 1px solid #e0e0e0;
-                    border-radius: 8px;
-                    padding: 1rem;
-                    margin-bottom: 0.8rem;
-                    background: #fafafa;
-                }
-                .record-row {
-                    display: flex;
-                    justify-content: space-between;
-                    margin-bottom: 0.5rem;
-                    font-size: 0.85rem;
-                }
-                .record-label {
-                    font-weight: 600;
-                    color: #666;
-                    min-width: 70px;
-                }
-                .record-value {
-                    text-align: right;
-                    color: #333;
-                    flex: 1;
-                    margin-left: 0.5rem;
-                    word-break: break-word;
-                }
-                </style>
-                """, unsafe_allow_html=True)
+                # 테이블 표시 (모바일에서는 스크롤 가능)
+                display_df = logs_df[['번호', '추출 시각', '관리자', 'IP 주소', '업체명', '품의번호', '상태', '거부사유']].copy()
+                st.dataframe(display_df, use_container_width=True, hide_index=True, height=300)
                 
+                # 사유서 다운로드 섹션
+                st.markdown("**사유서 다운로드**")
+                
+                # 모바일 친화적 - 세로로 배열
                 for idx, row in logs_df.iterrows():
-                    with st.container():
-                        col_content, col_btn = st.columns([4, 1])
+                    if row['거부사유'] and row['reject_file'] and os.path.exists(row['reject_file']):
+                        with open(row['reject_file'], 'rb') as f:
+                            file_data = f.read()
+                        file_name = os.path.basename(row['reject_file'])
                         
-                        with col_content:
-                            st.markdown(f"""
-                            <div class="record-card">
-                                <div class="record-row">
-                                    <span class="record-label">번호:</span>
-                                    <span class="record-value">{row['번호']}</span>
-                                </div>
-                                <div class="record-row">
-                                    <span class="record-label">시각:</span>
-                                    <span class="record-value">{row['추출 시각']}</span>
-                                </div>
-                                <div class="record-row">
-                                    <span class="record-label">관리자:</span>
-                                    <span class="record-value">{row['관리자']}</span>
-                                </div>
-                                <div class="record-row">
-                                    <span class="record-label">IP:</span>
-                                    <span class="record-value" style="font-size:0.75rem;">{row['IP 주소']}</span>
-                                </div>
-                                <div class="record-row">
-                                    <span class="record-label">업체:</span>
-                                    <span class="record-value">{row['업체명']}</span>
-                                </div>
-                                <div class="record-row">
-                                    <span class="record-label">품의:</span>
-                                    <span class="record-value">{row['품의번호'] if row['품의번호'] else '-'}</span>
-                                </div>
-                                <div class="record-row">
-                                    <span class="record-label">상태:</span>
-                                    <span class="record-value">{row['상태']}</span>
-                                </div>
-                                <div class="record-row">
-                                    <span class="record-label">사유:</span>
-                                    <span class="record-value">{row['거부사유'] if row['거부사유'] else '-'}</span>
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
+                        col_name, col_btn = st.columns([4, 1])
+                        with col_name:
+                            st.caption(f"[{row['업체명']}] {file_name}")
                         with col_btn:
-                            if row['거부사유'] and row['reject_file'] and os.path.exists(row['reject_file']):
-                                with open(row['reject_file'], 'rb') as f:
-                                    file_data = f.read()
-                                file_name = os.path.basename(row['reject_file'])
-                                st.download_button(
-                                    label="📥",
-                                    data=file_data,
-                                    file_name=file_name,
-                                    key=f"download_{key}_{row['번호']}",
-                                    help="사유서 다운로드"
-                                )
-                            else:
-                                st.write("-")
+                            st.download_button(
+                                label="📥",
+                                data=file_data,
+                                file_name=file_name,
+                                key=f"download_{key}_{row['번호']}",
+                            )
+                
+                if not any(logs_df['거부사유'].notna() & (logs_df['reject_file'] != '')):
+                    st.caption("다운로드 가능한 사유서가 없습니다.")
                 
                 st.markdown("---")
                 
