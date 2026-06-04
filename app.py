@@ -12,6 +12,7 @@ st.set_page_config(
     page_title="인테리어 연단가 순번관리 시스템",
     page_icon="🏢",
     layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
 # ── 로그인 정보 ───────────────────────────────────────────────
@@ -24,28 +25,15 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap');
 html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
 
-/* 로그인 화면 */
-.login-wrap {
-    max-width: 420px;
-    margin: 6rem auto 0 auto;
-    background: #fff;
-    border-radius: 20px;
-    padding: 3rem 2.5rem 2.5rem;
-    box-shadow: 0 8px 40px rgba(15,52,96,0.13);
-    text-align: center;
-}
-.login-icon { font-size: 3rem; margin-bottom: 0.5rem; }
-.login-title {
-    font-size: 1.35rem; font-weight: 700;
-    color: #1a1a2e; margin-bottom: 0.3rem;
-}
-.login-sub {
-    font-size: 0.88rem; color: #6b7280; margin-bottom: 1.8rem;
+/* 모바일 반응형 */
+@media (max-width: 768px) {
+    .main-title { font-size: 1.4rem !important; }
+    .company-name { font-size: 2.5rem !important; }
+    [data-testid="stColumn"] { min-width: 100% !important; }
 }
 
-/* 메인 화면 */
 .main-title {
-    font-size: 1.9rem; font-weight: 700;
+    font-size: 1.8rem; font-weight: 700;
     color: #1a1a2e; margin-bottom: 0.2rem;
 }
 .sub-title {
@@ -301,25 +289,25 @@ init_db()
 # ══════════════════════════════════════════════════════════════
 if not st.session_state.logged_in:
 
-    # 가운데 정렬을 위한 컬럼 트릭
-    _, center, _ = st.columns([1, 1.2, 1])
+    # 모바일 또는 데스크톱 대응
+    _, center, _ = st.columns([0.5, 2, 0.5])
     with center:
         st.markdown("""
-        <div class="login-wrap">
-            <div class="login-icon">🏢</div>
-            <div class="login-title">인테리어 연단가 순번관리 시스템</div>
-            <div class="login-sub">관리자 계정으로 로그인하세요</div>
+        <div class="login-wrap" style="max-width: 100%; margin: 2rem auto 0 auto; background: #fff; border-radius: 20px; padding: 2rem 1.5rem; box-shadow: 0 8px 40px rgba(15,52,96,0.13); text-align: center;">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🏢</div>
+            <div style="font-size: 1.2rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.3rem;">인테리어 연단가 순번관리 시스템</div>
+            <div style="font-size: 0.88rem; color: #6b7280; margin-bottom: 1.5rem;">관리자 계정으로 로그인하세요</div>
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
 
         user_id = st.text_input("아이디", placeholder="아이디를 입력하세요", key="login_id")
         user_pw = st.text_input("비밀번호", placeholder="비밀번호를 입력하세요", type="password", key="login_pw")
 
-        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
 
-        if st.button("🔐 로그인", key="login_btn"):
+        if st.button("🔐 로그인", key="login_btn", use_container_width=True):
             if user_id == ADMIN_ID and user_pw == ADMIN_PW:
                 st.session_state.logged_in = True
                 st.rerun()
@@ -331,14 +319,14 @@ if not st.session_state.logged_in:
 # ══════════════════════════════════════════════════════════════
 else:
 
-    # 상단: 제목 + 로그아웃
-    title_col, logout_col = st.columns([5, 1])
+    # 상단: 제목 + 로그아웃 (모바일 대응)
+    title_col, logout_col = st.columns([4, 1])
     with title_col:
         st.markdown('<div class="main-title">🏢 인테리어 연단가 순번관리 시스템</div>', unsafe_allow_html=True)
         st.markdown('<div class="sub-title">탭을 선택하여 각 분야별 순번을 관리하세요</div>', unsafe_allow_html=True)
     with logout_col:
-        st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
-        if st.button("🚪 로그아웃", key="logout_btn"):
+        st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
+        if st.button("🚪 로그아웃", key="logout_btn", use_container_width=True):
             st.session_state.logged_in = False
             st.rerun()
 
@@ -351,6 +339,7 @@ else:
         current_company = companies[idx]
         next_company = companies[(idx + 1) % len(companies)]
 
+        # 모바일에서는 단일 컬럼, 데스크톱에서는 2컬럼
         col_left, col_right = st.columns([1, 1.6], gap="large")
 
         with col_left:
