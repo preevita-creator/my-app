@@ -3,6 +3,9 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 import socket
+import os
+import shutil
+from pathlib import Path
 
 # ── 페이지 설정 ──────────────────────────────────────────────
 st.set_page_config(
@@ -93,12 +96,32 @@ div[data-testid="stButton"] > button {
     text-align: right; margin-bottom: 0.5rem;
     font-size: 0.85rem; color: #6b7280;
 }
+/* 데이터프레임 센터 정렬 */
+[data-testid="stDataFrame"] {
+    text-align: center !important;
+}
+[data-testid="stDataFrame"] thead th {
+    text-align: center !important;
+}
+[data-testid="stDataFrame"] tbody td {
+    text-align: center !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # ── 상수 ─────────────────────────────────────────────────────
-COMPANIES = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
 DB_PATH = "extraction_log.db"
+
+# 거부사유 파일 저장 폴더
+REJECT_FILES_DIR = "거부사유_파일"
+Path(REJECT_FILES_DIR).mkdir(exist_ok=True)
+
+# 탭별 업체 리스트
+COMPANY_LISTS = {
+    "interior": ["우리디자인", "문건축", "웰킵스디웰", "선미인터내셔널", "한스아이디", "에스피앤파트너", "이오에스앤디"],
+    "lighting": ["라잇톨로지", "라미디자인연구소", "디자인루나", "라이팅랩와츠", "루미노", "플로이 라이츠온"],
+    "supervision": ["무유에이엔디", "로담건축"],
+}
 
 TABS = [
     {
@@ -131,9 +154,21 @@ def init_db():
                 ip            TEXT NOT NULL,
                 extracted_at  TEXT NOT NULL,
                 status        TEXT NOT NULL DEFAULT '대기중',
-                reject_reason TEXT DEFAULT ''
+                reject_reason TEXT DEFAULT '',
+                reject_file   TEXT DEFAULT '',
+                approval_no   TEXT DEFAULT ''
             )
         """)
+        # 기존 테이블에 컬럼 추가 (이미 있으면 무시)
+        try:
+            conn.execute(f"ALTER TABLE logs_{k} ADD COLUMN reject_file TEXT DEFAULT ''")
+        except:
+            pass
+        try:
+            conn.execute(f"ALTER TABLE logs_{k} ADD COLUMN approval_no TEXT DEFAULT ''")
+        except:
+            pass
+        
         conn.execute(f"""
             CREATE TABLE IF NOT EXISTS state_{k} (
                 key   TEXT PRIMARY KEY,
@@ -148,29 +183,48 @@ def get_current_index(key):
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute(f"SELECT value FROM state_{key} WHERE key='current_index'").fetchone()
     conn.close()
-    return int(row[0]) if row else 0
+    index = int(row[0]) if row else 0
+    # 해당 탭의 업체 개수로 순환
+    max_companies = len(COMPANY_LISTS[key])
+    return index % max_companies
 
-def save_extraction(key, company, admin, ip):
+def save_extraction(key, company, admin, ip, approval_no=""):
     conn = sqlite3.connect(DB_PATH)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn.execute(
-        f"INSERT INTO logs_{key} (company, admin, ip, extracted_at, status, reject_reason) VALUES (?,?,?,?,?,?)",
-        (company, admin, ip, now, "대기중", "")
+        f"INSERT INTO logs_{key} (company, admin, ip, extracted_at, status, reject_reason, reject_file, approval_no) VALUES (?,?,?,?,?,?,?,?)",
+        (company, admin, ip, now, "대기중", "", "", approval_no)
     )
     current = int(conn.execute(f"SELECT value FROM state_{key} WHERE key='current_index'").fetchone()[0])
-    new_index = (current + 1) % len(COMPANIES)
+    max_companies = len(COMPANY_LISTS[key])
+    new_index = (current + 1) % max_companies
     conn.execute(f"UPDATE state_{key} SET value=? WHERE key='current_index'", (str(new_index),))
     conn.commit()
     conn.close()
 
-def update_status(key, log_id, status, reason=""):
+def update_status(key, log_id, status, reason="", file_data=None, file_name=""):
     conn = sqlite3.connect(DB_PATH)
+    
+    file_path = ""
+    if file_data and file_name and status == "거부":
+        # 날짜별 폴더 생성
+        date_folder = datetime.now().strftime("%Y-%m-%d")
+        date_dir = os.path.join(REJECT_FILES_DIR, date_folder)
+        Path(date_dir).mkdir(parents=True, exist_ok=True)
+        
+        # 파일 저장
+        file_path = os.path.join(date_dir, file_name)
+        with open(file_path, "wb") as f:
+            f.write(file_data)
+    
     conn.execute(
-        f"UPDATE logs_{key} SET status=?, reject_reason=? WHERE id=?",
-        (status, reason, log_id)
+        f"UPDATE logs_{key} SET status=?, reject_reason=?, reject_file=? WHERE id=?",
+        (status, reason, file_path, log_id)
     )
     conn.commit()
     conn.close()
+    
+    return file_path
 
 def get_pending_log(key):
     conn = sqlite3.connect(DB_PATH)
@@ -183,9 +237,9 @@ def get_pending_log(key):
 def load_logs(key):
     conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql_query(
-        f"""SELECT extracted_at AS '추출 시각', id AS '번호', company AS '업체',
-                   admin AS '관리자', ip AS 'IP 주소',
-                   status AS '상태', reject_reason AS '거절 사유'
+        f"""SELECT id AS '번호', extracted_at AS '추출 시각', admin AS '관리자', 
+                   ip AS 'IP 주소', company AS '업체명',
+                   approval_no AS '품의번호', status AS '상태', reject_reason AS '거부사유', reject_file AS 'reject_file'
             FROM logs_{key} ORDER BY id DESC""",
         conn
     )
@@ -197,6 +251,44 @@ def get_client_ip():
         return socket.gethostbyname(socket.gethostname())
     except Exception:
         return "127.0.0.1"
+
+def export_to_excel(key, tab_name):
+    """현재 탭의 데이터를 엑셀로 변환"""
+    df = load_logs(key)
+    if df.empty:
+        return None
+    
+    # 엑셀 저장을 위해 바이트로 변환
+    from io import BytesIO
+    output = BytesIO()
+    
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name=tab_name, index=False)
+        
+        # 엑셀 포맷팅
+        worksheet = writer.sheets[tab_name]
+        
+        # 모든 셀을 센터 정렬로 설정
+        from openpyxl.styles import Alignment
+        for row in worksheet.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        
+        # 컬럼 너비 자동 조정
+        for column in worksheet.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 30)
+            worksheet.column_dimensions[column_letter].width = adjusted_width
+    
+    output.seek(0)
+    return output.getvalue()
 
 # ── 세션 상태 초기화 ──────────────────────────────────────────
 if "logged_in" not in st.session_state:
@@ -253,68 +345,151 @@ else:
     # ── 탭 렌더링 ─────────────────────────────────────────────
     def render_tab(tab):
         key = tab["key"]
+        companies = COMPANY_LISTS[key]
+        
         idx = get_current_index(key)
-        current_company = COMPANIES[idx]
-        next_company = COMPANIES[(idx + 1) % len(COMPANIES)]
+        current_company = companies[idx]
+        next_company = companies[(idx + 1) % len(companies)]
 
         col_left, col_right = st.columns([1, 1.6], gap="large")
 
         with col_left:
             st.markdown(f"""
             <div class="company-card" style="background:{tab['gradient']};">
-                <div class="company-label">다음 순번 업체</div>
-                <div class="company-name">업체 {current_company}</div>
-                <div class="company-sub">{idx + 1} / {len(COMPANIES)} 번째 순번</div>
+                <div class="company-label">이번 순번 업체</div>
+                <div class="company-name">{current_company}</div>
+                <div class="company-sub">{idx + 1} / {len(companies)} 번째 순번</div>
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown(f'<div style="text-align:center;margin-bottom:1rem;">그 다음 → <span class="next-badge">업체 {next_company}</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="text-align:center;margin-bottom:1rem;">그 다음 → <span class="next-badge">{next_company}</span></div>', unsafe_allow_html=True)
 
             pending = get_pending_log(key)
 
             if pending:
                 pending_id, pending_company, _ = pending
-                st.warning(f"⏳ **업체 {pending_company}** 응답 대기중...")
-                st.markdown("**업체 수락 여부를 선택하세요**")
+                st.warning(f"⏳ **{pending_company}** 응답 대기중...")
+                st.markdown(f"**{pending_company}의 수락 여부를 선택하세요**")
 
                 col_a, col_r = st.columns(2)
                 with col_a:
                     if st.button("✅ 수락", key=f"accept_{key}"):
                         update_status(key, pending_id, "수락")
-                        st.success(f"업체 {pending_company} 수락 완료!")
+                        st.success(f"{pending_company} 수락 완료!")
                         st.rerun()
                 with col_r:
-                    if st.button("❌ 거절", key=f"reject_{key}"):
+                    if st.button("❌ 거부", key=f"reject_{key}"):
                         st.session_state[f"show_reject_{key}"] = True
 
                 if st.session_state.get(f"show_reject_{key}"):
-                    reject_reason = st.text_input("거절 사유를 입력하세요", key=f"reason_{key}")
-                    if st.button("거절 확정", key=f"confirm_reject_{key}"):
+                    reject_reason = st.text_input("거부 사유를 입력하세요", key=f"reason_{key}")
+                    reject_file = st.file_uploader("거부 사유 파일 첨부 (선택사항)", key=f"reject_file_{key}")
+                    
+                    if st.button("거부 확정", key=f"confirm_reject_{key}"):
                         if not reject_reason.strip():
-                            st.warning("⚠️ 거절 사유를 입력해 주세요.")
+                            st.warning("⚠️ 거부 사유를 입력해 주세요.")
                         else:
-                            update_status(key, pending_id, "거절", reject_reason.strip())
+                            file_data = None
+                            file_name = ""
+                            if reject_file is not None:
+                                file_data = reject_file.read()
+                                file_name = reject_file.name
+                            
+                            update_status(key, pending_id, "거부", reject_reason.strip(), file_data, file_name)
                             st.session_state[f"show_reject_{key}"] = False
-                            st.success(f"업체 {pending_company} 거절 처리 완료. 다음 순번으로 넘어갑니다.")
+                            st.success(f"{pending_company} 거부 처리 완료. 다음 순번으로 넘어갑니다.")
                             st.rerun()
             else:
                 admin_name = st.text_input("관리자 이름", placeholder="이름을 입력하세요", key=f"admin_{key}")
-                if st.button("⬆ 지금 추출하기", key=f"extract_{key}"):
+                approval_no = st.text_input("품의번호", placeholder="품의번호를 입력하세요", key=f"approval_{key}")
+                if st.button("⬆ 지금 선정하기", key=f"extract_{key}"):
                     if not admin_name.strip():
                         st.warning("⚠️ 관리자 이름을 먼저 입력해 주세요.")
                     else:
-                        save_extraction(key, current_company, admin_name.strip(), get_client_ip())
-                        st.success(f"✅ **업체 {current_company}** 추출 완료!")
+                        save_extraction(key, current_company, admin_name.strip(), get_client_ip(), approval_no.strip())
+                        st.success(f"✅ **{current_company}** 선정 완료!")
                         st.rerun()
 
         with col_right:
             st.markdown('<div class="log-header">📋 순번 이력</div>', unsafe_allow_html=True)
             logs_df = load_logs(key)
             if logs_df.empty:
-                st.info("아직 기록이 없습니다. 버튼을 눌러 추출을 시작하세요.")
+                st.info("아직 기록이 없습니다. 버튼을 눌러 선정을 시작하세요.")
             else:
-                st.dataframe(logs_df, use_container_width=True, hide_index=True, height=420)
-                st.caption(f"총 {len(logs_df)}건의 기록")
+                # 테이블 헤더
+                header_cols = st.columns([1.2, 2, 1.5, 1.8, 2, 1.5, 1.2, 2, 1.5])
+                with header_cols[0]:
+                    st.markdown("**번호**")
+                with header_cols[1]:
+                    st.markdown("**추출 시각**")
+                with header_cols[2]:
+                    st.markdown("**관리자**")
+                with header_cols[3]:
+                    st.markdown("**IP 주소**")
+                with header_cols[4]:
+                    st.markdown("**업체명**")
+                with header_cols[5]:
+                    st.markdown("**품의번호**")
+                with header_cols[6]:
+                    st.markdown("**상태**")
+                with header_cols[7]:
+                    st.markdown("**거부사유**")
+                with header_cols[8]:
+                    st.markdown("**다운로드**")
+                
+                st.divider()
+                
+                # 테이블 행
+                for idx, row in logs_df.iterrows():
+                    row_cols = st.columns([1.2, 2, 1.5, 1.8, 2, 1.5, 1.2, 2, 1.5])
+                    
+                    with row_cols[0]:
+                        st.write(str(row['번호']))
+                    with row_cols[1]:
+                        st.write(str(row['추출 시각']))
+                    with row_cols[2]:
+                        st.write(str(row['관리자']))
+                    with row_cols[3]:
+                        st.write(str(row['IP 주소']))
+                    with row_cols[4]:
+                        st.write(str(row['업체명']))
+                    with row_cols[5]:
+                        st.write(str(row['품의번호']))
+                    with row_cols[6]:
+                        st.write(str(row['상태']))
+                    with row_cols[7]:
+                        st.write(str(row['거부사유']) if row['거부사유'] else "-")
+                    with row_cols[8]:
+                        if row['거부사유'] and row['reject_file'] and os.path.exists(row['reject_file']):
+                            with open(row['reject_file'], 'rb') as f:
+                                file_data = f.read()
+                            file_name = os.path.basename(row['reject_file'])
+                            st.download_button(
+                                label="📥",
+                                data=file_data,
+                                file_name=file_name,
+                                key=f"download_{key}_{row['번호']}",
+                                help="사유서 다운로드"
+                            )
+                        else:
+                            st.write("-")
+                
+                st.markdown("---")
+                
+                # 엑셀 다운로드 버튼
+                excel_data = export_to_excel(key, tab['name'])
+                if excel_data:
+                    col_info, col_excel = st.columns([2, 1])
+                    with col_info:
+                        st.caption(f"총 {len(logs_df)}건의 기록")
+                    with col_excel:
+                        st.download_button(
+                            label="📥 엑셀 저장",
+                            data=excel_data,
+                            file_name=f"{tab['name'].replace(' ', '_')}_순번이력.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"excel_{key}"
+                        )
 
     tab1, tab2, tab3 = st.tabs([t["name"] for t in TABS])
     with tab1:
