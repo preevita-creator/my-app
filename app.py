@@ -195,13 +195,13 @@ def update_status(key, log_id, status, reason="", file_data=None, file_name=""):
     
     file_path = ""
     if file_data and file_name and status == "거부":
-        # 날짜별 폴더 생성
-        date_folder = datetime.now().strftime("%Y-%m-%d")
-        date_dir = os.path.join(REJECT_FILES_DIR, date_folder)
-        Path(date_dir).mkdir(parents=True, exist_ok=True)
+        # 폴더 생성 (날짜별 구분 없이)
+        Path(REJECT_FILES_DIR).mkdir(parents=True, exist_ok=True)
         
-        # 파일 저장
-        file_path = os.path.join(date_dir, file_name)
+        # 파일 저장 (중복 방지를 위해 타임스탐프 추가)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_filename = f"{timestamp}_{file_name}"
+        file_path = os.path.join(REJECT_FILES_DIR, safe_filename)
         with open(file_path, "wb") as f:
             f.write(file_data)
     
@@ -236,12 +236,10 @@ def load_logs(key):
 
 def is_mobile():
     """모바일 기기인지 감지"""
-    try:
-        # Streamlit의 query parameter로 모바일 여부 감지
-        # 또는 사용자 에이전트로 감지 (간단한 방법)
-        return False  # 기본값은 False, CSS 미디어쿼리로 처리
-    except:
-        return False
+    return False  # 기본값은 False, CSS 미디어쿼리로 처리
+
+def get_client_ip():
+    """클라이언트 IP 주소 반환"""
     try:
         return socket.gethostbyname(socket.gethostname())
     except Exception:
@@ -413,7 +411,7 @@ else:
                 st.info("아직 기록이 없습니다. 버튼을 눌러 선정을 시작하세요.")
             else:
                 # 테이블 헤더
-                header_cols = st.columns([1.2, 2, 1.5, 1.8, 2, 1.5, 1.2, 2, 1.5])
+                header_cols = st.columns([1, 1.8, 1.3, 1.5, 1.8, 1.3, 1, 1.8, 1.2])
                 with header_cols[0]:
                     st.markdown("**번호**")
                 with header_cols[1]:
@@ -437,7 +435,7 @@ else:
                 
                 # 테이블 행
                 for idx, row in logs_df.iterrows():
-                    row_cols = st.columns([1.2, 2, 1.5, 1.8, 2, 1.5, 1.2, 2, 1.5])
+                    row_cols = st.columns([1, 1.8, 1.3, 1.5, 1.8, 1.3, 1, 1.8, 1.2])
                     
                     with row_cols[0]:
                         st.write(str(row['번호']))
@@ -450,13 +448,13 @@ else:
                     with row_cols[4]:
                         st.write(str(row['업체명']))
                     with row_cols[5]:
-                        st.write(str(row['품의번호']))
+                        st.write(str(row['품의번호']) if row['품의번호'] else "-")
                     with row_cols[6]:
                         st.write(str(row['상태']))
                     with row_cols[7]:
                         st.write(str(row['거부사유']) if row['거부사유'] else "-")
                     with row_cols[8]:
-                        if row['거부사유'] and row['reject_file'] and os.path.exists(row['reject_file']):
+                        if row['reject_file'] and os.path.exists(row['reject_file']):
                             with open(row['reject_file'], 'rb') as f:
                                 file_data = f.read()
                             file_name = os.path.basename(row['reject_file'])
