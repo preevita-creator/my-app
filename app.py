@@ -412,33 +412,64 @@ else:
             if logs_df.empty:
                 st.info("아직 기록이 없습니다. 버튼을 눌러 선정을 시작하세요.")
             else:
-                # 테이블 표시 (모바일에서는 스크롤 가능)
-                display_df = logs_df[['번호', '추출 시각', '관리자', 'IP 주소', '업체명', '품의번호', '상태', '거부사유']].copy()
-                st.dataframe(display_df, use_container_width=True, hide_index=True, height=300)
+                # 테이블 헤더
+                header_cols = st.columns([1.2, 2, 1.5, 1.8, 2, 1.5, 1.2, 2, 1.5])
+                with header_cols[0]:
+                    st.markdown("**번호**")
+                with header_cols[1]:
+                    st.markdown("**추출 시각**")
+                with header_cols[2]:
+                    st.markdown("**관리자**")
+                with header_cols[3]:
+                    st.markdown("**IP 주소**")
+                with header_cols[4]:
+                    st.markdown("**업체명**")
+                with header_cols[5]:
+                    st.markdown("**품의번호**")
+                with header_cols[6]:
+                    st.markdown("**상태**")
+                with header_cols[7]:
+                    st.markdown("**거부사유**")
+                with header_cols[8]:
+                    st.markdown("**사유서**")
                 
-                # 사유서 다운로드 섹션
-                st.markdown("**사유서 다운로드**")
+                st.divider()
                 
-                # 모바일 친화적 - 세로로 배열
+                # 테이블 행
                 for idx, row in logs_df.iterrows():
-                    if row['거부사유'] and row['reject_file'] and os.path.exists(row['reject_file']):
-                        with open(row['reject_file'], 'rb') as f:
-                            file_data = f.read()
-                        file_name = os.path.basename(row['reject_file'])
-                        
-                        col_name, col_btn = st.columns([4, 1])
-                        with col_name:
-                            st.caption(f"[{row['업체명']}] {file_name}")
-                        with col_btn:
+                    row_cols = st.columns([1.2, 2, 1.5, 1.8, 2, 1.5, 1.2, 2, 1.5])
+                    
+                    with row_cols[0]:
+                        st.write(str(row['번호']))
+                    with row_cols[1]:
+                        st.write(str(row['추출 시각']))
+                    with row_cols[2]:
+                        st.write(str(row['관리자']))
+                    with row_cols[3]:
+                        st.write(str(row['IP 주소']))
+                    with row_cols[4]:
+                        st.write(str(row['업체명']))
+                    with row_cols[5]:
+                        st.write(str(row['품의번호']))
+                    with row_cols[6]:
+                        st.write(str(row['상태']))
+                    with row_cols[7]:
+                        st.write(str(row['거부사유']) if row['거부사유'] else "-")
+                    with row_cols[8]:
+                        if row['거부사유'] and row['reject_file'] and os.path.exists(row['reject_file']):
+                            with open(row['reject_file'], 'rb') as f:
+                                file_data = f.read()
+                            file_name = os.path.basename(row['reject_file'])
                             st.download_button(
                                 label="📥",
                                 data=file_data,
                                 file_name=file_name,
                                 key=f"download_{key}_{row['번호']}",
+                                help="사유서 다운로드",
+                                use_container_width=True
                             )
-                
-                if not any(logs_df['거부사유'].notna() & (logs_df['reject_file'] != '')):
-                    st.caption("다운로드 가능한 사유서가 없습니다.")
+                        else:
+                            st.write("-")
                 
                 st.markdown("---")
                 
@@ -450,7 +481,7 @@ else:
                         st.caption(f"총 {len(logs_df)}건의 기록")
                     with col_excel:
                         st.download_button(
-                            label="📥 엑셀",
+                            label="📥 엑셀 저장",
                             data=excel_data,
                             file_name=f"{tab['name'].replace(' ', '_')}_순번이력.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
