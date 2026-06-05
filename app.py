@@ -541,9 +541,13 @@ else:
                     st.markdown(f"""
                     <div style="text-align:center; padding:2rem; background:#e8f5e9; border-radius:10px;">
                     <div style="font-size:1.2rem; font-weight:bold; color:#2e7d32; margin-bottom:1rem;">의뢰가 완료되었습니다!</div>
-                    <div style="font-size:0.9rem; color:#558b2f;">로그아웃하고 있습니다...</div>
+                    <div style="font-size:0.9rem; color:#558b2f;">잠시 후 로그아웃됩니다...</div>
                     </div>
                     """, unsafe_allow_html=True)
+                    
+                    # 3초 대기
+                    import time
+                    time.sleep(3)
                     
                     st.session_state.logged_in = False
                     st.session_state.user_type = None
