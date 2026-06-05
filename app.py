@@ -516,35 +516,49 @@ else:
 
         st.markdown(f"""
         <div class="company-card" style="background:{tab['gradient']};">
-            <div class="company-label">의뢰 대상</div>
+            <div class="company-label">{tab['name'].replace('🛋 ', '').replace('💡 ', '').replace('🔍 ', '')}</div>
             <div class="company-name">●●●●●●●●●</div>
-            <div class="company-sub">정보 보호됨</div>
+            <div class="company-sub">관리자만 확인 가능</div>
         </div>
         """, unsafe_allow_html=True)
 
         approval_no = st.text_input("품의번호", placeholder="품의번호를 입력하세요", key=f"approval_{key}")
         
-        if st.button("⬆ 지금 의뢰하기", key=f"extract_{key}"):
-            if st.button("의뢰완료", key=f"confirm_{key}"):
-                save_extraction(key, current_company, st.session_state.user_name, st.session_state.user_id, approval_no, "")
-                st.balloons()
-                st.success(f"✅ 의뢰 완료!")
-                st.markdown(f"""
-                <div style="text-align:center; padding:2rem; background:#e8f5e9; border-radius:10px;">
-                <div style="font-size:1.2rem; font-weight:bold; color:#2e7d32; margin-bottom:1rem;">의뢰가 완료되었습니다!</div>
-                <div style="font-size:0.9rem; color:#558b2f;">잠시 후 로그아웃됩니다...</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # 3초 대기
-                import time
-                time.sleep(3)
-                
-                st.session_state.logged_in = False
-                st.session_state.user_type = None
-                st.session_state.user_name = None
-                st.session_state.user_id = None
+        col1, col2 = st.columns(2)
+        with col1:
+            # 품의번호가 입력되지 않으면 버튼 비활성화
+            if st.button(
+                "⬆ 지금 의뢰하기", 
+                key=f"extract_{key}", 
+                use_container_width=True,
+                disabled=not approval_no.strip()
+            ):
+                st.session_state[f"show_confirm_{key}"] = True
                 st.rerun()
+        
+        if st.session_state.get(f"show_confirm_{key}"):
+            with col2:
+                if st.button("의뢰완료", key=f"confirm_{key}", use_container_width=True):
+                    save_extraction(key, current_company, st.session_state.user_name, st.session_state.user_id, approval_no, "")
+                    st.session_state[f"show_confirm_{key}"] = False
+                    st.balloons()
+                    st.success(f"✅ 의뢰 완료!")
+                    st.markdown(f"""
+                    <div style="text-align:center; padding:2rem; background:#e8f5e9; border-radius:10px;">
+                    <div style="font-size:1.2rem; font-weight:bold; color:#2e7d32; margin-bottom:1rem;">의뢰가 완료되었습니다!</div>
+                    <div style="font-size:0.9rem; color:#558b2f;">잠시 후 로그아웃됩니다...</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # 3초 대기
+                    import time
+                    time.sleep(3)
+                    
+                    st.session_state.logged_in = False
+                    st.session_state.user_type = None
+                    st.session_state.user_name = None
+                    st.session_state.user_id = None
+                    st.rerun()
 
     tab1, tab2, tab3 = st.tabs([t["name"] for t in TABS])
     with tab1:
