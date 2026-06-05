@@ -538,22 +538,18 @@ else:
                     save_extraction(key, current_company, st.session_state.user_name, st.session_state.user_id, approval_no, "")
                     st.balloons()
                     st.success(f"✅ **{current_company}** 의뢰 완료!")
-                    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
                     st.markdown(f"""
                     <div style="text-align:center; padding:2rem; background:#e8f5e9; border-radius:10px;">
                     <div style="font-size:1.2rem; font-weight:bold; color:#2e7d32; margin-bottom:1rem;">의뢰가 완료되었습니다!</div>
-                    <div style="font-size:0.9rem; color:#558b2f;">3초 후 자동으로 로그아웃됩니다...</div>
+                    <div style="font-size:0.9rem; color:#558b2f;">로그아웃하고 있습니다...</div>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # JavaScript로 자동 새로고침
-                    st.markdown("""
-                    <script>
-                    setTimeout(function() {
-                        window.location.reload();
-                    }, 3000);
-                    </script>
-                    """, unsafe_allow_html=True)
+                    st.session_state.logged_in = False
+                    st.session_state.user_type = None
+                    st.session_state.user_name = None
+                    st.session_state.user_id = None
+                    st.rerun()
 
     tab1, tab2, tab3 = st.tabs([t["name"] for t in TABS])
     with tab1:
