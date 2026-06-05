@@ -109,20 +109,45 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     for tab in TABS:
         k = tab["key"]
-        conn.execute(f"""
-            CREATE TABLE IF NOT EXISTS logs_{k} (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                company       TEXT NOT NULL,
-                user_name     TEXT NOT NULL,
-                user_id       TEXT NOT NULL,
-                extracted_at  TEXT NOT NULL,
-                status        TEXT NOT NULL DEFAULT '대기중',
-                reject_reason TEXT DEFAULT '',
-                reject_file   TEXT DEFAULT '',
-                approval_no   TEXT DEFAULT '',
-                client_local_ip TEXT DEFAULT ''
-            )
-        """)
+        
+        # 테이블이 존재하는지 확인
+        cursor = conn.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='logs_{k}'")
+        table_exists = cursor.fetchone() is not None
+        
+        if not table_exists:
+            # 새 테이블 생성
+            conn.execute(f"""
+                CREATE TABLE logs_{k} (
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    company       TEXT NOT NULL,
+                    user_name     TEXT NOT NULL,
+                    user_id       TEXT NOT NULL,
+                    extracted_at  TEXT NOT NULL,
+                    status        TEXT NOT NULL DEFAULT '대기중',
+                    reject_reason TEXT DEFAULT '',
+                    reject_file   TEXT DEFAULT '',
+                    approval_no   TEXT DEFAULT '',
+                    client_local_ip TEXT DEFAULT ''
+                )
+            """)
+        else:
+            # 기존 테이블 마이그레이션 (필요한 컬럼 추가)
+            try:
+                conn.execute(f"ALTER TABLE logs_{k} ADD COLUMN user_name TEXT DEFAULT ''")
+            except:
+                pass
+            try:
+                conn.execute(f"ALTER TABLE logs_{k} ADD COLUMN user_id TEXT DEFAULT ''")
+            except:
+                pass
+            try:
+                conn.execute(f"ALTER TABLE logs_{k} ADD COLUMN client_local_ip TEXT DEFAULT ''")
+            except:
+                pass
+            try:
+                conn.execute(f"ALTER TABLE logs_{k} ADD COLUMN approval_no TEXT DEFAULT ''")
+            except:
+                pass
         
         conn.execute(f"""
             CREATE TABLE IF NOT EXISTS state_{k} (
