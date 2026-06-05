@@ -140,6 +140,7 @@ def init_db():
                 company       TEXT NOT NULL,
                 admin         TEXT NOT NULL,
                 ip            TEXT NOT NULL,
+                client_local_ip TEXT DEFAULT '',
                 extracted_at  TEXT NOT NULL,
                 status        TEXT NOT NULL DEFAULT '대기중',
                 reject_reason TEXT DEFAULT '',
@@ -148,6 +149,10 @@ def init_db():
             )
         """)
         # 기존 테이블에 컬럼 추가 (이미 있으면 무시)
+        try:
+            conn.execute(f"ALTER TABLE logs_{k} ADD COLUMN client_local_ip TEXT DEFAULT ''")
+        except:
+            pass
         try:
             conn.execute(f"ALTER TABLE logs_{k} ADD COLUMN reject_file TEXT DEFAULT ''")
         except:
@@ -176,12 +181,12 @@ def get_current_index(key):
     max_companies = len(COMPANY_LISTS[key])
     return index % max_companies
 
-def save_extraction(key, company, admin, ip, approval_no=""):
+def save_extraction(key, company, admin, ip, approval_no="", client_local_ip=""):
     conn = sqlite3.connect(DB_PATH)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn.execute(
-        f"INSERT INTO logs_{key} (company, admin, ip, extracted_at, status, reject_reason, reject_file, approval_no) VALUES (?,?,?,?,?,?,?,?)",
-        (company, admin, ip, now, "대기중", "", "", approval_no)
+        f"INSERT INTO logs_{key} (company, admin, ip, client_local_ip, extracted_at, status, reject_reason, reject_file, approval_no) VALUES (?,?,?,?,?,?,?,?,?)",
+        (company, admin, ip, client_local_ip, now, "대기중", "", "", approval_no)
     )
     current = int(conn.execute(f"SELECT value FROM state_{key} WHERE key='current_index'").fetchone()[0])
     max_companies = len(COMPANY_LISTS[key])
@@ -226,7 +231,7 @@ def load_logs(key):
     conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql_query(
         f"""SELECT id AS '번호', extracted_at AS '추출 시각', admin AS '관리자', 
-                   ip AS 'IP 주소', company AS '업체명',
+                   client_local_ip AS '접속자IP', company AS '업체명',
                    approval_no AS '품의번호', status AS '상태', reject_reason AS '거부사유', reject_file AS 'reject_file'
             FROM logs_{key} ORDER BY id DESC""",
         conn
@@ -244,6 +249,40 @@ def get_client_ip():
         return socket.gethostbyname(socket.gethostname())
     except Exception:
         return "127.0.0.1"
+
+def inject_ip_detection_script():
+    """클라이언트 로컬 IP 감지 JavaScript 주입"""
+    st.markdown("""
+    <script>
+    function getClientLocalIP() {
+        return new Promise((resolve) => {
+            const pc = new RTCPeerConnection({iceServers: []});
+            pc.createDataChannel('');
+            pc.createOffer().then(offer => pc.setLocalDescription(offer)).catch(() => {});
+            
+            pc.onicecandidate = (ice) => {
+                if (!ice || !ice.candidate) return;
+                const ipRegex = /([0-9]{1,3}(\\.[0-9]{1,3}){3})/;
+                const ipMatch = ice.candidate.candidate.match(ipRegex);
+                if (ipMatch) {
+                    const ipAddress = ipMatch[1];
+                    if (ipAddress.startsWith('192.') || ipAddress.startsWith('10.') || ipAddress.startsWith('172.')) {
+                        pc.close();
+                        localStorage.setItem('clientLocalIP', ipAddress);
+                    }
+                }
+            };
+            
+            setTimeout(() => {
+                pc.close();
+                resolve(localStorage.getItem('clientLocalIP') || '');
+            }, 3000);
+        });
+    }
+    
+    getClientLocalIP();
+    </script>
+    """, unsafe_allow_html=True)
 
 def export_to_excel(key, tab_name):
     """현재 탭의 데이터를 엑셀로 변환"""
@@ -324,6 +363,9 @@ if not st.session_state.logged_in:
 # ══════════════════════════════════════════════════════════════
 else:
 
+    # IP 감지 스크립트 실행
+    inject_ip_detection_script()
+
     # 상단: 제목 + 로그아웃 (모바일 대응)
     title_col, logout_col = st.columns([4, 1])
     with title_col:
@@ -400,7 +442,9 @@ else:
                     if not admin_name.strip():
                         st.warning("⚠️ 관리자 이름을 먼저 입력해 주세요.")
                     else:
-                        save_extraction(key, current_company, admin_name.strip(), get_client_ip(), approval_no.strip())
+                        # JavaScript에서 저장한 클라이언트 IP 읽기
+                        client_local_ip = st.session_state.get(f"client_ip_{key}", "")
+                        save_extraction(key, current_company, admin_name.strip(), get_client_ip(), approval_no.strip(), client_local_ip)
                         st.success(f"✅ **{current_company}** 선정 완료!")
                         st.rerun()
 
@@ -419,7 +463,7 @@ else:
                 with header_cols[2]:
                     st.markdown("**관리자**")
                 with header_cols[3]:
-                    st.markdown("**IP 주소**")
+                    st.markdown("**접속자IP**")
                 with header_cols[4]:
                     st.markdown("**업체명**")
                 with header_cols[5]:
@@ -444,7 +488,7 @@ else:
                     with row_cols[2]:
                         st.write(str(row['관리자']))
                     with row_cols[3]:
-                        st.write(str(row['IP 주소']))
+                        st.write(str(row['접속자IP']) if row['접속자IP'] else "-")
                     with row_cols[4]:
                         st.write(str(row['업체명']))
                     with row_cols[5]:
