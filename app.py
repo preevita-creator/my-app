@@ -287,11 +287,23 @@ if not st.session_state.logged_in:
     
     else:  # 사용자
         user_name = st.text_input("이름", placeholder="이름을 입력하세요", key="user_name_input")
-        user_id = st.text_input("사번", placeholder="사번을 입력하세요", key="user_id_input")
+        user_id = st.text_input(
+            "사번", 
+            placeholder="사번을 입력하세요 (숫자만, 최대 9자)",
+            key="user_id_input",
+            max_chars=9
+        )
+        
+        # 사번이 숫자만인지 확인
+        if user_id and not user_id.isdigit():
+            st.warning("⚠️ 사번은 숫자만 입력 가능합니다.")
+            user_id = ""
         
         if st.button("📱 입장", use_container_width=True):
             if not user_name.strip() or not user_id.strip():
                 st.warning("⚠️ 이름과 사번을 모두 입력해 주세요.")
+            elif not user_id.isdigit():
+                st.warning("⚠️ 사번은 숫자만 입력 가능합니다.")
             else:
                 st.session_state.logged_in = True
                 st.session_state.user_type = "user"
@@ -503,14 +515,8 @@ else:
         approval_no = st.text_input("품의번호", placeholder="품의번호를 입력하세요", key=f"approval_{key}")
         
         if st.button("⬆ 지금 선정하기", key=f"extract_{key}"):
-            client_local_ip = st.text_input(
-                "당신의 로컬 IP (예: 192.168.x.x)",
-                placeholder="자신의 PC 로컬 IP를 입력하세요",
-                key=f"client_ip_{key}"
-            )
-            
             if st.button("선정 완료", key=f"confirm_{key}"):
-                save_extraction(key, current_company, st.session_state.user_name, st.session_state.user_id, approval_no, client_local_ip)
+                save_extraction(key, current_company, st.session_state.user_name, st.session_state.user_id, approval_no, "")
                 st.success(f"✅ **{current_company}** 선정 완료!")
                 st.rerun()
 
