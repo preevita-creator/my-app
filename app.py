@@ -115,26 +115,14 @@ def init_db():
                 company       TEXT NOT NULL,
                 user_name     TEXT NOT NULL,
                 user_id       TEXT NOT NULL,
-                client_local_ip TEXT DEFAULT '',
                 extracted_at  TEXT NOT NULL,
                 status        TEXT NOT NULL DEFAULT '대기중',
                 reject_reason TEXT DEFAULT '',
                 reject_file   TEXT DEFAULT '',
-                approval_no   TEXT DEFAULT ''
+                approval_no   TEXT DEFAULT '',
+                client_local_ip TEXT DEFAULT ''
             )
         """)
-        try:
-            conn.execute(f"ALTER TABLE logs_{k} ADD COLUMN user_name TEXT DEFAULT ''")
-        except:
-            pass
-        try:
-            conn.execute(f"ALTER TABLE logs_{k} ADD COLUMN user_id TEXT DEFAULT ''")
-        except:
-            pass
-        try:
-            conn.execute(f"ALTER TABLE logs_{k} ADD COLUMN client_local_ip TEXT DEFAULT ''")
-        except:
-            pass
         
         conn.execute(f"""
             CREATE TABLE IF NOT EXISTS state_{k} (
@@ -158,8 +146,8 @@ def save_extraction(key, company, user_name, user_id, approval_no="", client_loc
     conn = sqlite3.connect(DB_PATH)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn.execute(
-        f"INSERT INTO logs_{key} (company, user_name, user_id, client_local_ip, extracted_at, status, reject_reason, reject_file, approval_no) VALUES (?,?,?,?,?,?,?,?,?)",
-        (company, user_name, user_id, client_local_ip, now, "대기중", "", "", approval_no)
+        f"INSERT INTO logs_{key} (company, user_name, user_id, extracted_at, status, reject_reason, reject_file, approval_no, client_local_ip) VALUES (?,?,?,?,?,?,?,?,?)",
+        (company, user_name, user_id, now, "대기중", "", "", approval_no, client_local_ip)
     )
     current = int(conn.execute(f"SELECT value FROM state_{key} WHERE key='current_index'").fetchone()[0])
     max_companies = len(COMPANY_LISTS[key])
