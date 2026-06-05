@@ -352,7 +352,7 @@ elif st.session_state.user_type == "admin":
         with col_left:
             st.markdown(f"""
             <div class="company-card" style="background:{tab['gradient']};">
-                <div class="company-label">이번 순번 업체</div>
+                <div class="company-label">다음번 순번 업체</div>
                 <div class="company-name">{current_company}</div>
                 <div class="company-sub">{idx + 1} / {len(companies)} 번째 순번</div>
             </div>
